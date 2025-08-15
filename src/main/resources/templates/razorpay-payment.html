@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Razorpay Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+
+<h2>Pay Rental Order</h2>
+
+<label>Rental Order ID:</label>
+<input type="number" id="rentalOrderId" th:value="${rentalOrderId}" />
+<button id="payBtn">Pay Now</button>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const razorpayKey = /*[[${razorpayKey}]]*/ '';
+    /*]]>*/
+</script>
+
+<script>
+    document.getElementById('payBtn').onclick = function () {
+        const rentalOrderId = document.getElementById('rentalOrderId').value;
+        if (!rentalOrderId) {
+            alert('Please enter Rental Order ID');
+            return;
+        }
+
+        fetch('/razor/payment/order/' + rentalOrderId, { method: 'POST' })
+            .then(res => {
+                if (!res.ok) throw new Error('Network response was not ok');
+                return res.json();
+            })
+            .then(orderData => {
+                const options = {
+                    key: razorpayKey,                   // Use key injected by Thymeleaf
+                    amount: Math.round(orderData.amount * 100),  // amount in paise
+                    currency: orderData.currency,
+                    order_id: orderData.razorpayOrderId,
+                    name: 'Rental Payment',
+                    description: 'Payment for Rental Order #' + rentalOrderId,
+                    handler: function (response) {
+                        // Call backend callback endpoint to verify payment
+                        fetch('/razor/payment/callback', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                rentalOrderId: rentalOrderId,
+                                razorpayPaymentId: response.razorpay_payment_id,
+                                razorpayOrderId: response.razorpay_order_id,
+                                razorpaySignature: response.razorpay_signature
+                            })
+                        })
+                        .then(res => res.text())
+                        .then(msg => alert(msg))
+                        .catch(err => alert('Payment verification failed: ' + err.message));
+                    },
+                    theme: { color: '#3399cc' }
+                };
+                const rzp = new Razorpay(options);
+                rzp.open();
+            })
+            .catch(err => alert('Error creating order: ' + err.message));
+    };
+</script>
+
+</body>
+</html>
